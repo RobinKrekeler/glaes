@@ -13,7 +13,7 @@ from json import dumps
 #################################################################
 ## DEFINE SOURCES
 
-INPUT_RAW_DIR = 'C:/Users/Robin/Documents/Inatech/Model/input_raw/'
+INPUT_RAW_DIR = "../Master-Thesis-Robin-Krekeler/input_raw/"
 
 waterdepthSource = INPUT_RAW_DIR + 'GEBCO/gebco_2020_n75.0_s30.0_w-18.0_e48.0.tif'
 ##################################################################
@@ -32,7 +32,7 @@ def evaluate_WATERDEPTH(regSource, ftrID, tail):
     description = "Indicates pixels in which the water depth is less-than or equal-to X meters"
     source = "GEBCO 2020 Gridded Bathymetry"
 
-    output_dir = join("C:\\Users\\Robin\\Documents\\Inatech\\Model\\input_raw\\GLAES", name)
+    output_dir = join("../Master-Thesis-Robin-Krekeler/input_raw/GLAES/", name)
 
     # Get distances
     thresholds = EVALUATION_VALUES[name]
