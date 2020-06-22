@@ -20,8 +20,8 @@ waterdepthSource = INPUT_RAW_DIR + 'GEBCO/gebco_2020_n75.0_s30.0_w-18.0_e48.0.ti
 ## DEFINE EDGES
 EVALUATION_VALUES = { 
     "waterdepth_threshold":
-        # Indicates distances too close to mixed-tree forests (m)
-        [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1400, 1600, 1800, 2000, 2500, 3000, 4000, 5000]
+        # Indicates area with waterdepth less than X (m)
+        [0, 5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 150, 200, 300, 500, 1000, 1500]
       }
 
 #######################################################
@@ -41,11 +41,34 @@ def evaluate_WATERDEPTH(regSource, ftrID, tail):
     reg = gk.RegionMask.load(regSource, select=ftrID, padExtent=500)
 
     # Create a geometry list from the osm files
-    result = edgesByThreshold(reg, waterdepthSource, thresholds)
+    result = edgesByThreshold(reg, waterdepthSource, [-x for x in thresholds], True)
 
     # make result
     writeEdgeFile( result, reg, ftrID, output_dir, name, tail, unit, description, source, thresholds)
 
+
+def evaluate_PARK(regSource, ftrID, tail):
+    name = "protected_park_proximity"
+    unit = "meters"
+    description = "Indicates pixels which are less-than or equal-to X meters from a protected park"
+    source = "WDPA"
+
+    output_dir = join("outputs", name)
+
+    # Get distances
+    distances = EVALUATION_VALUES[name]
+
+    # Make Region Mask
+    reg = gk.RegionMask.load(regSource, select=ftrID, padExtent=max(distances))
+
+    # Create a geometry list from the osm files
+    geom = geomExtractor( reg.extent, wdpaSource, where=r"DESIG_ENG LIKE '%park%' OR IUCN_CAT = 'II'")
+
+    # Get edge matrix
+    result = edgesByProximity(reg, geom, distances)
+
+    # make result
+    writeEdgeFile( result, reg, ftrID, output_dir, name, tail, unit, description, source, distances)
 
 ##################################################################
 ## UTILITY FUNCTIONS
@@ -89,7 +112,7 @@ def edgesByProximity(reg, geom, distances):
     # Done!
     return mat
 
-def edgesByThreshold(reg, source, thresholds):
+def edgesByThreshold(reg, source, thresholds, inverse=False):
     # make initial matrix
     mat = np.ones(reg.mask.shape, dtype=np.uint8)*255 # Set all values to no data (255)
     mat[reg.mask] = 254 # Set all values in the region to untouched (254)
@@ -97,7 +120,10 @@ def edgesByThreshold(reg, source, thresholds):
     # Only do growing if a geometry is available
     value = 0
     for thresh in thresholds:
-        indicated = reg.indicateValues(source, value=(None,thresh)) > 0.5
+        if inverse:
+            indicated = reg.indicateValues(source, value=(thresh,None)) > 0.5
+        else:
+            indicated = reg.indicateValues(source, value=(None,thresh)) > 0.5
 
         # apply onto matrix
         sel = np.logical_and(mat==254, indicated) # write onto pixels which are indicated and available
