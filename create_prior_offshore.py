@@ -15,13 +15,14 @@ from json import dumps
 
 INPUT_RAW_DIR = "../Master-Thesis-Robin-Krekeler/input_raw/"
 
-waterdepthSource = INPUT_RAW_DIR + 'GEBCO/gebco_2020_n75.0_s30.0_w-18.0_e48.0.tif'
+waterdepthSource = INPUT_RAW_DIR + 'GEBCO/gebco_2020_n75.0_s30.0_w-44.0_e75.0.tif'
 ##################################################################
 ## DEFINE EDGES
 EVALUATION_VALUES = { 
     "waterdepth_threshold":
         # Indicates area with waterdepth less than X (m)
-        [0, 5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 150, 200, 300, 500, 1000, 1500]
+        [0, 5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 150, 200, 300, 
+         500, 750, 1000, 1250, 1500, 2000]
       }
 
 #######################################################
