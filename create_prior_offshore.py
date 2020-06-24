@@ -16,18 +16,29 @@ from json import dumps
 INPUT_RAW_DIR = "../Master-Thesis-Robin-Krekeler/input_raw/"
 
 waterdepthSource = INPUT_RAW_DIR + 'GEBCO/gebco_2020_n75.0_s30.0_w-44.0_e75.0.tif'
+wpdaMarineSource = INPUT_RAW_DIR + 'WDPA/'
+countriesSource = INPUT_RAW_DIR + 'NaturalEarth/ne_10m_admin_0_countries.shp'
+
 ##################################################################
 ## DEFINE EDGES
 EVALUATION_VALUES = { 
     "waterdepth_threshold":
         # Indicates area with waterdepth less than X (m)
         [0, 5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 150, 200, 300, 
-         500, 750, 1000, 1250, 1500, 2000]
+         500, 750, 1000, 1250, 1500, 2000],
+    "shore_proximity":
+        # Indicates distances too close to protected areas (m)
+        [0, 500, 1000, 1500, 2000, 5000, 7000, 10000, 12000, 14000, 16000,
+         18000, 20000, 22000, 25000, 30000],
+    "protected_marine_area_proximity":
+        # Indicates distances too close to protected areas (m)
+        [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1400,
+         1600, 1800, 2000, 2500, 3000, 4000, 5000]
       }
 
 #######################################################
 ## EVALUATION FUNCTIONS
-def evaluate_WATERDEPTH(regSource, ftrID, tail):
+def evaluate_WATERDEPTH(regSource, tail):
     name = "waterdepth_threshold"
     unit = "meters"
     description = "Indicates pixels in which the water depth is less-than or equal-to X meters"
@@ -39,19 +50,43 @@ def evaluate_WATERDEPTH(regSource, ftrID, tail):
     thresholds = EVALUATION_VALUES[name]
 
     # Make Region Mask
-    reg = gk.RegionMask.load(regSource, select=ftrID, padExtent=500)
+    reg = gk.RegionMask.load(regSource, padExtent=500)
 
     # Create a geometry list from the osm files
     result = edgesByThreshold(reg, waterdepthSource, [-x for x in thresholds], True)
 
     # make result
-    writeEdgeFile( result, reg, ftrID, output_dir, name, tail, unit, description, source, thresholds)
+    writeEdgeFile( result, reg, output_dir, name, tail, unit, description, source, thresholds)
 
 
-def evaluate_PARK(regSource, ftrID, tail):
-    name = "protected_park_proximity"
+def evaluate_SHORE(regSource, tail):
+    name = "shore_proximity"
     unit = "meters"
-    description = "Indicates pixels which are less-than or equal-to X meters from a protected park"
+    description = "Indicates pixels which are less-than or equal-to X meters from shore"
+    source = "NaturalEarth"
+
+    output_dir = join("../Master-Thesis-Robin-Krekeler/input_raw/GLAES/", name)
+
+    # Get distances
+    distances = [x/100 for x in EVALUATION_VALUES[name]]
+    
+    # Make Region Mask
+    reg = gk.RegionMask.load(regSource, select=0, padExtent=max(distances))
+
+    # Create a geometry list from the NaturalEarth files
+    geom = geomExtractor(reg.extent, countriesSource, r"CONTINENT = 'Europe'")
+
+    # Get edge matrix
+    result = edgesByProximity(reg, geom, distances)
+
+    # make result
+    writeEdgeFile( result, reg, output_dir, name, tail, unit, description, source, distances)
+
+
+def evaluate_MARINERESERVES(regSource, tail):
+    name = "protected_marine_area_proximity"
+    unit = "meters"
+    description = "Indicates pixels which are less-than or equal-to X meters from a protected area"
     source = "WDPA"
 
     output_dir = join("outputs", name)
@@ -60,16 +95,16 @@ def evaluate_PARK(regSource, ftrID, tail):
     distances = EVALUATION_VALUES[name]
 
     # Make Region Mask
-    reg = gk.RegionMask.load(regSource, select=ftrID, padExtent=max(distances))
+    reg = gk.RegionMask.load(regSource, padExtent=max(distances))
 
     # Create a geometry list from the osm files
-    geom = geomExtractor( reg.extent, wdpaSource, where=r"DESIG_ENG LIKE '%park%' OR IUCN_CAT = 'II'")
+    geom = geomExtractor( reg.extent, wdpaSource)
 
     # Get edge matrix
     result = edgesByProximity(reg, geom, distances)
 
     # make result
-    writeEdgeFile( result, reg, ftrID, output_dir, name, tail, unit, description, source, distances)
+    writeEdgeFile( result, reg, output_dir, name, tail, unit, description, source, distances)
 
 ##################################################################
 ## UTILITY FUNCTIONS
@@ -134,9 +169,9 @@ def edgesByThreshold(reg, source, thresholds, inverse=False):
     # Done!
     return mat
 
-def writeEdgeFile( result, reg, ftrID, output_dir, name, tail, unit, description, source, values):
+def writeEdgeFile( result, reg, output_dir, name, tail, unit, description, source, values):
     # make output
-    output = "%s.%s_%05d.tif"%(name,tail,ftrID)
+    output = "%s.%s.tif"%(name,tail)
     if not isdir(output_dir): mkdir(output_dir)
 
     valueMap = OrderedDict()
@@ -157,7 +192,7 @@ def writeEdgeFile( result, reg, ftrID, output_dir, name, tail, unit, description
 
     d = reg.createRaster(output=join(output_dir,output), data=result, overwrite=True, noDataValue=255, dtype=1, meta=meta)
 
-def geomExtractor( extent, source, where=None, simplify=None ): 
+def geomExtractor( extent, source, where=None, simplify=None ):
     searchGeom = extent.box
     if isinstance(source,str):
         searchFiles = [source,]
@@ -166,7 +201,7 @@ def geomExtractor( extent, source, where=None, simplify=None ):
     
     geoms = []
     for f in searchFiles:
-        for geom, attr in gk.vector.extractFeatures(f, searchGeom, where=where, outputSRS=extent.srs):
+        for geom in gk.vector.extractFeatures(f, geom=searchGeom, where=where, outputSRS=extent.srs)['geom']:
             geoms.append( geom.Clone() )
 
     if not simplify is None: 
@@ -205,40 +240,7 @@ if __name__== '__main__':
     else:
         source = sys.argv[2]
 
-    # Arange workers
-    if len(sys.argv)<4:
-        doMulti = False
-    else:
-        doMulti = True
-        pool = Pool(int(sys.argv[3]))
-    
-    # submit jobs
-    res = []
-    count = -1
-    # for g,a in gk.vector.extractFeatures(source):
-    for g in gk.vector.extractFeatures(source):
-        count += 1
-        #if count<1 : continue
-        #if count == 2:break
-
-        # Do the analysis
-        if doMulti:
-            res.append(pool.apply_async(func, (source, count, tail)))
-        else:
-            func(source, count, tail)
-    
-    if doMulti:
-        # Check for errors
-        for r,i in zip(res,range(len(res))):
-            try:
-                r.get()
-            except Exception as e:
-                print("EXCEPTION AT ID: "+str(i))
-                raise e
-
-        # Wait for jobs to finish
-        pool.close()
-        pool.join()
+    func(source, tail)
 
     # finished!
     END= dt.now()

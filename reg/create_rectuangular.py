@@ -27,7 +27,7 @@ with fiona.open(OUT_DIR, 'w', 'ESRI Shapefile', SCHEMA, crs=CRS) as c:
 # =============================================================================
 # Test: North sea
 # =============================================================================
-north_sea = sp.box(4E6, 3.3E6, 4.3E6, 3.6E6)  # xl, yl, xu, yu
+north_sea = sp.box(4E6, 3.3E6, 4.3E6, 3.7E6)  # xl, yl, xu, yu
 
 CRS = fiona.crs.from_epsg(3035)
 
@@ -77,5 +77,12 @@ europe_eez = gpd.GeoDataFrame({'geometry': europe_eez}, crs=eez.crs)
 # common CRS
 europe_eez = europe_eez.to_crs(europe_rectangular.crs)
 
-europe_eez_rectangular = gpd.overlay(europe_rectangular,europe_eez, how='intersection')
+europe_eez_rectangular = gpd.GeoDataFrame(
+    {'geometry': gpd.overlay(europe_rectangular,europe_eez, how='intersection').unary_union}, 
+    crs=europe_rectangular.crs
+    )
 europe_eez_rectangular.to_file(OUT_DIR)
+
+with fiona.open(OUT_DIR, 'w', 'ESRI Shapefile', SCHEMA, crs=europe_rectangular.crs) as c:
+    c.write({'geometry': sp.mapping(europe_eez_rectangular2),
+             'properties': {'id': 'scope'}})
