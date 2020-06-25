@@ -16,8 +16,14 @@ from json import dumps
 INPUT_RAW_DIR = "../Master-Thesis-Robin-Krekeler/input_raw/"
 
 waterdepthSource = INPUT_RAW_DIR + 'GEBCO/gebco_2020_n75.0_s30.0_w-44.0_e75.0.tif'
-wpdaMarineSource = INPUT_RAW_DIR + 'WDPA/'
+wdpaMarineSource = (INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile0/WDPA_Jun2020_marine-shapefile-polygons.shp',
+                    INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile0/WDPA_Jun2020_marine-shapefile-points.shp',
+                    INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile1/WDPA_Jun2020_marine-shapefile-polygons.shp',
+                    INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile1/WDPA_Jun2020_marine-shapefile-points.shp',
+                    INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile2/WDPA_Jun2020_marine-shapefile-polygons.shp',
+                    INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile2/WDPA_Jun2020_marine-shapefile-points.shp')
 countriesSource = INPUT_RAW_DIR + 'NaturalEarth/ne_10m_admin_0_countries.shp'
+seacablesSource = INPUT_RAW_DIR + 'SubmarineCableMap/cable-geo.json'
 
 ##################################################################
 ## DEFINE EDGES
@@ -32,9 +38,12 @@ EVALUATION_VALUES = {
          18000, 20000, 22000, 25000, 30000],
     "protected_marine_area_proximity":
         # Indicates distances too close to protected areas (m)
-        [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1400,
-         1600, 1800, 2000, 2500, 3000, 4000, 5000]
-      }
+        [0, 200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2500, 3000, 
+         4000, 5000],
+    "submarine_cable_proximity":
+        # Indicates distances too close to  submarine cables (m)
+        [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+    }
 
 #######################################################
 ## EVALUATION FUNCTIONS
@@ -68,13 +77,13 @@ def evaluate_SHORE(regSource, tail):
     output_dir = join("../Master-Thesis-Robin-Krekeler/input_raw/GLAES/", name)
 
     # Get distances
-    distances = [x/100 for x in EVALUATION_VALUES[name]]
+    distances = EVALUATION_VALUES[name]
     
     # Make Region Mask
     reg = gk.RegionMask.load(regSource, select=0, padExtent=max(distances))
 
     # Create a geometry list from the NaturalEarth files
-    geom = geomExtractor(reg.extent, countriesSource, r"CONTINENT = 'Europe'")
+    geom = geomExtractor(reg.extent, countriesSource, r"CONTINENT = 'Europe'", srs=reg.srs)
 
     # Get edge matrix
     result = edgesByProximity(reg, geom, distances)
@@ -89,22 +98,53 @@ def evaluate_MARINERESERVES(regSource, tail):
     description = "Indicates pixels which are less-than or equal-to X meters from a protected area"
     source = "WDPA"
 
-    output_dir = join("outputs", name)
+    output_dir = join("../Master-Thesis-Robin-Krekeler/input_raw/GLAES/", name)
 
     # Get distances
     distances = EVALUATION_VALUES[name]
 
     # Make Region Mask
-    reg = gk.RegionMask.load(regSource, padExtent=max(distances))
+    reg = gk.RegionMask.load(regSource, select=0, padExtent=max(distances))
 
     # Create a geometry list from the osm files
-    geom = geomExtractor( reg.extent, wdpaSource)
+    geom = []
+    for s in wdpaMarineSource:
+        try: 
+            geom.extend(geomExtractor(reg.extent, s, srs=reg.srs))
+        except TypeError: 
+            print('No feature extracted from ...' + str(s[-60:]))
 
     # Get edge matrix
     result = edgesByProximity(reg, geom, distances)
 
     # make result
     writeEdgeFile( result, reg, output_dir, name, tail, unit, description, source, distances)
+
+
+def evaluate_SEACABLES(regSource, tail):
+    name = "submarine_cable_proximity"
+    unit = "meters"
+    description = "Indicates pixels which are less-than or equal-to X meters from submarine cables"
+    source = "SubmarineCableMap"
+
+    output_dir = join("../Master-Thesis-Robin-Krekeler/input_raw/GLAES/", name)
+
+    # Get distances
+    distances = EVALUATION_VALUES[name]
+    
+    # Make Region Mask
+    reg = gk.RegionMask.load(regSource, select=0, padExtent=max(distances))
+
+    # Create a geometry list from the NaturalEarth files
+    geom = geomExtractor(reg.extent, seacablesSource, srs=reg.srs)
+
+    # Get edge matrix
+    result = edgesByProximity(reg, geom, distances)
+
+    # make result
+    writeEdgeFile( result, reg, output_dir, name, tail, unit, description, source, distances)
+
+
 
 ##################################################################
 ## UTILITY FUNCTIONS
@@ -192,7 +232,7 @@ def writeEdgeFile( result, reg, output_dir, name, tail, unit, description, sourc
 
     d = reg.createRaster(output=join(output_dir,output), data=result, overwrite=True, noDataValue=255, dtype=1, meta=meta)
 
-def geomExtractor( extent, source, where=None, simplify=None ):
+def geomExtractor(extent, source, where=None, simplify=None, srs=None):
     searchGeom = extent.box
     if isinstance(source,str):
         searchFiles = [source,]
@@ -201,7 +241,7 @@ def geomExtractor( extent, source, where=None, simplify=None ):
     
     geoms = []
     for f in searchFiles:
-        for geom in gk.vector.extractFeatures(f, geom=searchGeom, where=where, outputSRS=extent.srs)['geom']:
+        for geom in gk.vector.extractFeatures(f, geom=searchGeom, where=where, outputSRS=extent.srs, srs=srs)['geom']:
             geoms.append( geom.Clone() )
 
     if not simplify is None: 
