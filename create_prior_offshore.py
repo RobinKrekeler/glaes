@@ -17,11 +17,12 @@ INPUT_RAW_DIR = "../Master-Thesis-Robin-Krekeler/input_raw/"
 
 waterdepthSource = INPUT_RAW_DIR + 'GEBCO/gebco_2020_n75.0_s30.0_w-44.0_e75.0.tif'
 wdpaMarineSource = (INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile0/WDPA_Jun2020_marine-shapefile-polygons.shp',
-                    INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile0/WDPA_Jun2020_marine-shapefile-points.shp',
+                    # INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile0/WDPA_Jun2020_marine-shapefile-points.shp',
                     INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile1/WDPA_Jun2020_marine-shapefile-polygons.shp',
-                    INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile1/WDPA_Jun2020_marine-shapefile-points.shp',
-                    INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile2/WDPA_Jun2020_marine-shapefile-polygons.shp',
-                    INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile2/WDPA_Jun2020_marine-shapefile-points.shp')
+                    # INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile1/WDPA_Jun2020_marine-shapefile-points.shp',
+                    INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile2/WDPA_Jun2020_marine-shapefile-polygons.shp'#,
+                    # INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile2/WDPA_Jun2020_marine-shapefile-points.shp'
+                    )
 countriesSource = INPUT_RAW_DIR + 'NaturalEarth/ne_10m_admin_0_countries.shp'
 seacablesSource = INPUT_RAW_DIR + 'SubmarineCableMap/cable-geo.json'
 
