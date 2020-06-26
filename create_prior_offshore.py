@@ -1,14 +1,12 @@
 import geokit as gk
 import numpy as np
-from os.path import join, isdir, isfile, basename, splitext
+from os.path import join, isdir
 from os import mkdir
 import sys
-from multiprocessing import Pool
-import time
 from datetime import datetime as dt
-from glob import glob
-from collections import namedtuple, OrderedDict
+from collections import OrderedDict
 from json import dumps
+from osgeo import ogr                                                                       
 
 #################################################################
 ## DEFINE SOURCES
@@ -25,7 +23,7 @@ wdpaMarineSource = (INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile0/WDPA_Ju
                     )
 countriesSource = INPUT_RAW_DIR + 'NaturalEarth/ne_10m_admin_0_countries.shp'
 seacablesSource = INPUT_RAW_DIR + 'SubmarineCableMap/cable-geo.json'
-pipielinesSource = INPUT_RAW_DIR + 'WorldMap/natural_gas_pipelines_j96.shp'
+pipelinesSource = INPUT_RAW_DIR + 'WorldMap/natural_gas_pipelines_j96.shp'
 
 ##################################################################
 ## DEFINE EDGES
@@ -118,9 +116,9 @@ def evaluate_MARINERESERVES(regSource, tail):
             geom.extend(geomExtractor(reg.extent, s, srs=reg.srs))
         except TypeError: 
             print('No feature extracted from ...' + str(s[-60:]))
-
+            
     # Get edge matrix
-    result = edgesByProximity(reg, geom, distances)
+    result = edgesByProximity(reg, dissolve(geom), distances)
 
     # make result
     writeEdgeFile( result, reg, output_dir, name, tail, unit, description, source, distances)
@@ -165,7 +163,7 @@ def evaluate_PIPELINES(regSource, tail):
     reg = gk.RegionMask.load(regSource, select=0, padExtent=max(distances))
 
     # Create a geometry list from the NaturalEarth files
-    geom = geomExtractor(reg.extent, seacablesSource, srs=reg.srs)
+    geom = geomExtractor(reg.extent, pipelinesSource, srs=reg.srs)
 
     # Get edge matrix
     result = edgesByProximity(reg, geom, distances)
@@ -291,6 +289,26 @@ def geomExtractor(extent, source, where=None, simplify=None, srs=None):
         return None
     else:
         return geoms
+
+
+
+def dissolve(geom):
+    multipolygon = ogr.Geometry(ogr.wkbMultiPolygon)
+    sr = geom[0].GetSpatialReference()
+    for g in geom:
+        multipolygon.AddGeometry(g)
+        if g.GetSpatialReference().ExportToWkt() != sr.ExportToWkt():
+            print('All elements in geom have to have the same CRS.')
+            raise
+
+    multipolygon = multipolygon.UnionCascaded()
+    multipolygon.AssignSpatialReference(sr)
+    
+    return[multipolygon]
+    # out = []
+    # for in multipolygon:
+    #     out.append(p)
+    # return ou pt
 
 ###################################################################
 ## MAIN FUNCTIONALITY
