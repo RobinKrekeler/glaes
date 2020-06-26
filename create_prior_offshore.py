@@ -25,6 +25,7 @@ wdpaMarineSource = (INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile0/WDPA_Ju
                     )
 countriesSource = INPUT_RAW_DIR + 'NaturalEarth/ne_10m_admin_0_countries.shp'
 seacablesSource = INPUT_RAW_DIR + 'SubmarineCableMap/cable-geo.json'
+pipielinesSource = INPUT_RAW_DIR + 'WorldMap/natural_gas_pipelines_j96.shp'
 
 ##################################################################
 ## DEFINE EDGES
@@ -43,6 +44,9 @@ EVALUATION_VALUES = {
          4000, 5000],
     "submarine_cable_proximity":
         # Indicates distances too close to  submarine cables (m)
+        [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+    "pipeline_proximity":
+        # Indicates distances too close to  natural gas pipelines(m)
         [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
     }
 
@@ -127,6 +131,30 @@ def evaluate_SEACABLES(regSource, tail):
     unit = "meters"
     description = "Indicates pixels which are less-than or equal-to X meters from submarine cables"
     source = "SubmarineCableMap"
+
+    output_dir = join("../Master-Thesis-Robin-Krekeler/input_raw/GLAES/", name)
+
+    # Get distances
+    distances = EVALUATION_VALUES[name]
+    
+    # Make Region Mask
+    reg = gk.RegionMask.load(regSource, select=0, padExtent=max(distances))
+
+    # Create a geometry list from the NaturalEarth files
+    geom = geomExtractor(reg.extent, seacablesSource, srs=reg.srs)
+
+    # Get edge matrix
+    result = edgesByProximity(reg, geom, distances)
+
+    # make result
+    writeEdgeFile( result, reg, output_dir, name, tail, unit, description, source, distances)
+
+
+def evaluate_PIPELINES(regSource, tail):
+    name = "pipeline_proximity"
+    unit = "meters"
+    description = "Indicates pixels which are less-than or equal-to X meters from natural gas pipelines"
+    source = "WorldMap"
 
     output_dir = join("../Master-Thesis-Robin-Krekeler/input_raw/GLAES/", name)
 
