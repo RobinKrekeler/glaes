@@ -2,8 +2,10 @@
 import pandas as pd
 import geopandas as gpd
 import shapely.geometry as sp
+from shapely.ops import unary_union
 import fiona
 import fiona.crs
+from rtree import index
 
 
 SCHEMA = {'geometry': 'Polygon',
@@ -62,17 +64,62 @@ OUT_DIR = 'C:/users/Robin/Git_Projects/glaes/reg/europe_eez_rectangular.shp'
 # read shp files
 eez = gpd.read_file('C:/Users/Robin/Documents/Inatech/Model/input_raw/Marineregions/eez_v11.shp')
 europe_rectangular = gpd.read_file('C:/users/Robin/Git_Projects/glaes/reg/europe_rectangular.shp')
-europe = pd.read_csv('C:/Users/Robin/Documents/Inatech/Model/input_raw/ISO/country_codes.csv',
-                     encoding='ISO-8859-1')
+# europe = pd.read_csv('C:/Users/Robin/Documents/Inatech/Model/input_raw/ISO/country_codes.csv',
+                     # encoding='ISO-8859-1')
 
 # filter EEZ of european countries
-europe = europe[europe['region'] == 'Europe']['alpha-3']
-europe = europe[europe != 'RUS']
-europe_eez = eez[eez['ISO_SOV1'].isin(europe)].cx[-44:75, 30:75]
+# europe = europe[europe['region'] == 'Europe']['alpha-3']
+# europe = europe[europe != 'RUS']
+# europe_eez = eez[eez['ISO_SOV1'].isin(europe)].cx[-44:75, 30:75]
+europe_eez = eez.cx[-44:75, 30:75]
 
 # unify european EEZs
 europe_eez = europe_eez['geometry'].unary_union
 europe_eez = gpd.GeoDataFrame({'geometry': europe_eez}, crs=eez.crs)
+
+# common CRS
+europe_eez = europe_eez.to_crs(europe_rectangular.crs)
+
+europe_eez_rectangular = gpd.GeoDataFrame(
+    {'geometry': gpd.overlay(europe_rectangular,europe_eez, how='intersection').unary_union}, 
+    crs=europe_rectangular.crs
+    )
+europe_eez_rectangular.to_file(OUT_DIR)
+
+# with fiona.open(OUT_DIR, 'w', 'ESRI Shapefile', SCHEMA, crs=europe_rectangular.crs) as c:
+#     c.write({'geometry': sp.mapping(europe_eez_rectangular2),
+#              'properties': {'id': 'scope'}})
+    
+    
+#%%
+# =============================================================================
+# European scope EEZ
+# =============================================================================
+
+OUT_DIR = 'C:/users/Robin/Git_Projects/glaes/reg/europe_eez_rectangular2.shp'
+
+# read shp files
+eez_dir = 'C:/Users/Robin/Documents/Inatech/Model/input_raw/Marineregions/eez_v11.shp'
+europe_rectangular = fiona.open('C:/users/Robin/Git_Projects/glaes/reg/europe_rectangular.shp')
+
+# filter shaoes in rectangular
+
+with fiona.open(eez_dir, 'w', driver='ESRI Shapefile') as eez:
+    eez_scope = eez.filter(bbox=(-44, 75, 30, 75))    
+
+
+idx = index.Index()
+for pos, poly in enumerate(europe_rectangular):
+   idx.insert(pos, sp.shape(poly['geometry']).bounds)
+   
+   
+   
+for poly in eez:
+    eez_scope = [sp.shape(poly['geometry'])]
+    
+    
+    
+    
 
 # common CRS
 europe_eez = europe_eez.to_crs(europe_rectangular.crs)
