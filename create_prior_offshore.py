@@ -6,12 +6,16 @@ import sys
 from datetime import datetime as dt
 from collections import OrderedDict
 from json import dumps
-from osgeo import ogr                                                                       
+from osgeo import ogr
+from multiprocessing import Process                                                                     
 
-#################################################################
-## DEFINE SOURCES
+
+# =============================================================================
+# DEFINE SOURCES
+# =============================================================================
 
 INPUT_RAW_DIR = "../Master-Thesis-Robin-Krekeler/input_raw/"
+OUTPUT_DIR = "../Master-Thesis-Robin-Krekeler/input_raw/GLAES/"
 
 waterdepthSource = INPUT_RAW_DIR + 'GEBCO/gebco_2020_n75.0_s30.0_w-44.0_e75.0.tif'
 wdpaMarineSource = (INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile0/WDPA_Jun2020_marine-shapefile-polygons.shp',
@@ -24,9 +28,14 @@ wdpaMarineSource = (INPUT_RAW_DIR + 'WDPA/WDPA_Jun2020_marine-shapefile0/WDPA_Ju
 countriesSource = INPUT_RAW_DIR + 'NaturalEarth/ne_10m_admin_0_countries.shp'
 seacablesSource = INPUT_RAW_DIR + 'SubmarineCableMap/cable-geo.json'
 pipelinesSource = INPUT_RAW_DIR + 'WorldMap/natural_gas_pipelines_j96.shp'
+shippingSource = INPUT_RAW_DIR + 'KNB/shipping_hand_drawn.shp'
 
-##################################################################
-## DEFINE EDGES
+
+#%%
+# =============================================================================
+# DEFINE EDGES
+# =============================================================================
+
 EVALUATION_VALUES = { 
     "waterdepth_threshold":
         # Indicates area with waterdepth less than X (m)
@@ -40,23 +49,32 @@ EVALUATION_VALUES = {
         # Indicates distances too close to protected areas (m)
         [0, 200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2500, 3000, 
          4000, 5000],
+    "protected_marine_bird_proximity":
+        # Indicates distances too close to protected bird areas (m)
+        [0, 200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2500, 3000, 
+         4000, 5000],
     "submarine_cable_proximity":
-        # Indicates distances too close to  submarine cables (m)
+        # Indicates distances too close to submarine cables (m)
         [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
     "pipeline_proximity":
-        # Indicates distances too close to  natural gas pipelines(m)
-        [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+        # Indicates distances too close to natural gas pipelines (m)
+        [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+    "shipping_proximity":
+        # Indicates distances too close to center of shipping routes (m)
+        [0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 
+         6000]
     }
 
-#######################################################
-## EVALUATION FUNCTIONS
+
+#%%
+# =============================================================================
+# EVALUATION FUNCTIONS
+# =============================================================================
 def evaluate_WATERDEPTH(regSource, tail):
     name = "waterdepth_threshold"
     unit = "meters"
     description = "Indicates pixels in which the water depth is less-than or equal-to X meters"
     source = "GEBCO 2020 Gridded Bathymetry"
-
-    output_dir = join("../Master-Thesis-Robin-Krekeler/input_raw/GLAES/", name)
 
     # Get distances
     thresholds = EVALUATION_VALUES[name]
@@ -68,7 +86,7 @@ def evaluate_WATERDEPTH(regSource, tail):
     result = edgesByThreshold(reg, waterdepthSource, [-x for x in thresholds], True)
 
     # make result
-    writeEdgeFile( result, reg, output_dir, name, tail, unit, description, source, thresholds)
+    writeEdgeFile(result, reg, name, tail, unit, description, source, thresholds)
 
 
 def evaluate_SHORE(regSource, tail):
@@ -76,8 +94,6 @@ def evaluate_SHORE(regSource, tail):
     unit = "meters"
     description = "Indicates pixels which are less-than or equal-to X meters from shore"
     source = "NaturalEarth"
-
-    output_dir = join("../Master-Thesis-Robin-Krekeler/input_raw/GLAES/", name)
 
     # Get distances
     distances = EVALUATION_VALUES[name]
@@ -92,7 +108,7 @@ def evaluate_SHORE(regSource, tail):
     result = edgesByProximity(reg, geom, distances)
 
     # make result
-    writeEdgeFile( result, reg, output_dir, name, tail, unit, description, source, distances)
+    writeEdgeFile( result, reg, name, tail, unit, description, source, distances)
 
 
 def evaluate_MARINERESERVES(regSource, tail):
@@ -100,8 +116,6 @@ def evaluate_MARINERESERVES(regSource, tail):
     unit = "meters"
     description = "Indicates pixels which are less-than or equal-to X meters from a protected area"
     source = "WDPA"
-
-    output_dir = join("../Master-Thesis-Robin-Krekeler/input_raw/GLAES/", name)
 
     # Get distances
     distances = EVALUATION_VALUES[name]
@@ -121,7 +135,34 @@ def evaluate_MARINERESERVES(regSource, tail):
     result = edgesByProximity(reg, dissolve(geom), distances)
 
     # make result
-    writeEdgeFile( result, reg, output_dir, name, tail, unit, description, source, distances)
+    writeEdgeFile( result, reg, name, tail, unit, description, source, distances)
+
+
+def evaluate_MARINEBRIDS(regSource, tail):
+    name = "protected_marine_bird_proximity"
+    unit = "meters"
+    description = "Indicates pixels which are less-than or equal-to X meters from a protected bird area"
+    source = "WDPA"
+
+    # Get distances
+    distances = EVALUATION_VALUES[name]
+
+    # Make Region Mask
+    reg = gk.RegionMask.load(regSource, select=0, padExtent=max(distances))
+
+    # Create a geometry list from the osm files
+    geom = []
+    for s in wdpaMarineSource:
+        try: 
+            geom.extend(geomExtractor(reg.extent, s, srs=reg.srs, where=r"DESIG_ENG LIKE '%bird%'"))
+        except TypeError: 
+            print('No feature extracted from ...' + str(s[-60:]))
+
+    # Get edge matrix
+    result = edgesByProximity(reg, dissolve(geom), distances)
+
+    # make result
+    writeEdgeFile( result, reg, name, tail, unit, description, source, distances)
 
 
 def evaluate_SEACABLES(regSource, tail):
@@ -129,8 +170,6 @@ def evaluate_SEACABLES(regSource, tail):
     unit = "meters"
     description = "Indicates pixels which are less-than or equal-to X meters from submarine cables"
     source = "SubmarineCableMap"
-
-    output_dir = join("../Master-Thesis-Robin-Krekeler/input_raw/GLAES/", name)
 
     # Get distances
     distances = EVALUATION_VALUES[name]
@@ -145,7 +184,7 @@ def evaluate_SEACABLES(regSource, tail):
     result = edgesByProximity(reg, geom, distances)
 
     # make result
-    writeEdgeFile( result, reg, output_dir, name, tail, unit, description, source, distances)
+    writeEdgeFile( result, reg, name, tail, unit, description, source, distances)
 
 
 def evaluate_PIPELINES(regSource, tail):
@@ -153,9 +192,7 @@ def evaluate_PIPELINES(regSource, tail):
     unit = "meters"
     description = "Indicates pixels which are less-than or equal-to X meters from natural gas pipelines"
     source = "WorldMap"
-
-    output_dir = join("../Master-Thesis-Robin-Krekeler/input_raw/GLAES/", name)
-
+    
     # Get distances
     distances = EVALUATION_VALUES[name]
     
@@ -169,12 +206,36 @@ def evaluate_PIPELINES(regSource, tail):
     result = edgesByProximity(reg, geom, distances)
 
     # make result
-    writeEdgeFile( result, reg, output_dir, name, tail, unit, description, source, distances)
+    writeEdgeFile( result, reg, name, tail, unit, description, source, distances)
 
 
+def evaluate_SHIPPING(regSource, tail):
+    name = "shipping_proximity"
+    unit = "meters"
+    description = "Indicates pixels which are less-than or equal-to X meters from center of shipping routes"
+    source = "Knowledge Network for Biocomplexity"
 
-##################################################################
-## UTILITY FUNCTIONS
+    # Get distances
+    distances = EVALUATION_VALUES[name]
+    
+    # Make Region Mask
+    reg = gk.RegionMask.load(regSource, select=0, padExtent=max(distances))
+
+    # Create a geometry list from the NaturalEarth files
+    geom = geomExtractor(reg.extent, shippingSource, srs=reg.srs)
+
+    # Get edge matrix
+    result = edgesByProximity(reg, geom, distances)
+
+    # make result
+    writeEdgeFile( result, reg, name, tail, unit, description, source, distances)
+
+
+#%%
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
+
 def edgesByProximity(reg, geom, distances):
     
     # make initial matrix
@@ -215,6 +276,7 @@ def edgesByProximity(reg, geom, distances):
     # Done!
     return mat
 
+
 def edgesByThreshold(reg, source, thresholds, inverse=False):
     # make initial matrix
     mat = np.ones(reg.mask.shape, dtype=np.uint8)*255 # Set all values to no data (255)
@@ -236,28 +298,6 @@ def edgesByThreshold(reg, source, thresholds, inverse=False):
     # Done!
     return mat
 
-def writeEdgeFile( result, reg, output_dir, name, tail, unit, description, source, values):
-    # make output
-    output = "%s.%s.tif"%(name,tail)
-    if not isdir(output_dir): mkdir(output_dir)
-
-    valueMap = OrderedDict()
-    for i in range(len(values)): valueMap["%d"%i]="<=%.2f"%values[i]
-    valueMap["254"]="untouched"
-    valueMap["255"]="noData"
-
-    meta = OrderedDict()
-    meta["GLAES_PRIOR"] = "YES"
-    meta["DISPLAY_NAME"] = name
-    meta["ALTERNATE_NAME"] = "NONE"
-    meta["DESCRIPTION"] = description
-    meta["UNIT"] = unit
-    meta["SOURCE"] = source
-    meta["VALUE_MAP"] = dumps(valueMap)
-
-    print(output)
-
-    d = reg.createRaster(output=join(output_dir,output), data=result, overwrite=True, noDataValue=255, dtype=1, meta=meta)
 
 def geomExtractor(extent, source, where=None, simplify=None, srs=None):
     searchGeom = extent.box
@@ -291,11 +331,15 @@ def geomExtractor(extent, source, where=None, simplify=None, srs=None):
         return geoms
 
 
-
 def dissolve(geom):
     multipolygon = ogr.Geometry(ogr.wkbMultiPolygon)
-    sr = geom[0].GetSpatialReference()
+    first_step = True
     for g in geom:
+        if not g.IsValid():
+            continue
+        if first_step:
+            sr = g.GetSpatialReference()
+            first_step = False
         multipolygon.AddGeometry(g)
         if g.GetSpatialReference().ExportToWkt() != sr.ExportToWkt():
             print('All elements in geom have to have the same CRS.')
@@ -305,32 +349,62 @@ def dissolve(geom):
     multipolygon.AssignSpatialReference(sr)
     
     return[multipolygon]
-    # out = []
-    # for in multipolygon:
-    #     out.append(p)
-    # return ou pt
 
-###################################################################
-## MAIN FUNCTIONALITY
+
+def writeEdgeFile( result, reg, name, tail, unit, description, source, values):
+    # make output
+    output = "%s.%s.tif"%(name,tail)
+    if not isdir(OUTPUT_DIR): mkdir(OUTPUT_DIR)
+
+    valueMap = OrderedDict()
+    for i in range(len(values)): valueMap["%d"%i]="<=%.2f"%values[i]
+    valueMap["254"]="untouched"
+    valueMap["255"]="noData"
+
+    meta = OrderedDict()
+    meta["GLAES_PRIOR"] = "YES"
+    meta["DISPLAY_NAME"] = name
+    meta["ALTERNATE_NAME"] = "NONE"
+    meta["DESCRIPTION"] = description
+    meta["UNIT"] = unit
+    meta["SOURCE"] = source
+    meta["VALUE_MAP"] = dumps(valueMap)
+
+    print(output)
+
+    d = reg.createRaster(output=join(OUTPUT_DIR,output), data=result, overwrite=True, noDataValue=255, dtype=1, meta=meta)
+
+
+
+#%%
+# =============================================================================
+# MAIN FUNCTIONALITY
+# =============================================================================
+
 if __name__== '__main__':
-    START= dt.now()
+    START = dt.now()
     tail = str(int(dt.now().timestamp()))
     print( "RUN ID: ", tail)
     print( "TIME START: ", START)
 
-    # Choose the function
-    func = globals()["evaluate_"+sys.argv[1]]
-
-    # Choose the source
-    if len(sys.argv)<3:
-        source = join("reg","aachenShapefile.shp")
+    source = sys.argv[2]
+    constraints = str(sys.argv[1]).split(',')
+    
+    # parallelize if multiple contraints are given
+    if len(constraints) > 1:
+        jobs = []
+        for c in constraints:
+            func = globals()["evaluate_" + c]
+            j = Process(target=func, args=(source, tail))
+            jobs.append(j)
+            j.start()
+        # wait for all jobs to finish
+        for j in jobs:
+            j.join()
     else:
-        source = sys.argv[2]
+        func = globals()["evaluate_" + str(constraints[0])]
+        func(source, tail)
 
-    func(source, tail)
-
-    # finished!
-    END= dt.now()
+    END = dt.now()
     print( "TIME END: ", END)
     print( "CALC TIME: ", (END-START))
-
