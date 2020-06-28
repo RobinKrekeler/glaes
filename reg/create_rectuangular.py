@@ -1,8 +1,10 @@
 """Create rectangular shapefile as scope for GLAES priors."""
 import pandas as pd
 import geopandas as gpd
+from functools import partial
 import shapely.geometry as sp
-from shapely.ops import unary_union
+from shapely.ops import unary_union, transform
+import pyproj
 import fiona
 import fiona.crs
 from rtree import index
@@ -96,16 +98,51 @@ europe_eez_rectangular.to_file(OUT_DIR)
 # European scope EEZ
 # =============================================================================
 
+#paths
 OUT_DIR = 'C:/users/Robin/Git_Projects/glaes/reg/europe_eez_rectangular2.shp'
-
-# read shp files
 eez_dir = 'C:/Users/Robin/Documents/Inatech/Model/input_raw/Marineregions/eez_v11.shp'
-europe_rectangular = fiona.open('C:/users/Robin/Git_Projects/glaes/reg/europe_rectangular.shp')
+europe_rectangular_dir ='C:/users/Robin/Git_Projects/glaes/reg/europe_rectangular.shp'
 
 # filter shaoes in rectangular
+polygons = []
+with fiona.open(eez_dir) as eez:
+    meta_source = eez.meta
+    
+    with fiona.open(europe_rectangular_dir) as europe_rectangular:
+        meta = europe_rectangular.meta
+        
+        for rectangular in europe_rectangular:
+            rect = sp.shape(rectangular['geometry'])
+            
+    # reprojection to EPSG:3035
+    project = partial(pyproj.transform,
+                      pyproj.Proj(**meta_source['crs']),  # from
+                      pyproj.Proj(**meta['crs']))  # to                
+    
+    for feature in eez.filter(bbox=(-44, 30, 75, 75)):
+        if feature["geometry"] is None:
+            print('continue 1')
+            continue
+        
+        feat = sp.shape(feature['geometry'])
+        
+        if isinstance(feat, sp.multipolygon.MultiPolygon):
+            feat = unary_union(feat)
+        
+        feat = transform(project, feat)
+        polygon = feat.intersection(rect)
+        
+        if not polygon.is_empty:
+            polygons.append(polygon)
 
-with fiona.open(eez_dir, 'w', driver='ESRI Shapefile') as eez:
-    eez_scope = eez.filter(bbox=(-44, 75, 30, 75))    
+out_shape = unary_union(polygons)
+
+# write file
+with fiona.open(OUT_DIR, 'w', driver='ESRI Shapefile', schema=SCHEMA, crs=meta['crs']) as europe_eez_rectangular:
+    europe_eez_rectangular.write({'geometry': sp.mapping(out_shape),
+                                  'properties': {'id': 'scope'}})
+
+
 
 
 idx = index.Index()
@@ -130,6 +167,6 @@ europe_eez_rectangular = gpd.GeoDataFrame(
     )
 europe_eez_rectangular.to_file(OUT_DIR)
 
-with fiona.open(OUT_DIR, 'w', 'ESRI Shapefile', SCHEMA, crs=europe_rectangular.crs) as c:
+with fiona.open(OUT_DIR, 'w', 'ESRI Shapefile', schema=SCHEMA, crs=europe_rectangular.crs) as c:
     c.write({'geometry': sp.mapping(europe_eez_rectangular2),
              'properties': {'id': 'scope'}})
