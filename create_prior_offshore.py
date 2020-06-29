@@ -130,9 +130,9 @@ def evaluate_MARINERESERVES(regSource, tail):
             geom.extend(geomExtractor(reg.extent, s, srs=reg.srs))
         except TypeError: 
             print('No feature extracted from ...' + str(s[-60:]))
-            
+
     # Get edge matrix
-    result = edgesByProximity(reg, dissolve(geom), distances)
+    result = edgesByProximity(reg, geom, distances)
 
     # make result
     writeEdgeFile( result, reg, name, tail, unit, description, source, distances)
@@ -159,7 +159,7 @@ def evaluate_MARINEBIRDS(regSource, tail):
             print('No feature extracted from ...' + str(s[-60:]))
 
     # Get edge matrix
-    result = edgesByProximity(reg, dissolve(geom), distances)
+    result = edgesByProximity(reg, geom, distances)
 
     # make result
     writeEdgeFile( result, reg, name, tail, unit, description, source, distances)
@@ -336,19 +336,21 @@ def dissolve(geom):
     first_step = True
     for g in geom:
         if not g.IsValid():
-            continue
+            g = g.Buffer(0)
         if first_step:
             sr = g.GetSpatialReference()
             first_step = False
+
         multipolygon.AddGeometry(g)
+
         if g.GetSpatialReference().ExportToWkt() != sr.ExportToWkt():
             print('All elements in geom have to have the same CRS.')
             raise
 
-    multipolygon = multipolygon.UnionCascaded()
-    multipolygon.AssignSpatialReference(sr)
+    polygon = multipolygon.UnionCascaded()
+    polygon.AssignSpatialReference(sr)
     
-    return[multipolygon]
+    return [polygon]
 
 
 def writeEdgeFile( result, reg, name, tail, unit, description, source, values):
