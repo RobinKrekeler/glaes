@@ -138,7 +138,7 @@ def evaluate_MARINERESERVES(regSource, tail):
     writeEdgeFile( result, reg, name, tail, unit, description, source, distances)
 
 
-def evaluate_MARINEBRIDS(regSource, tail):
+def evaluate_MARINEBIRDS(regSource, tail):
     name = "protected_marine_bird_proximity"
     unit = "meters"
     description = "Indicates pixels which are less-than or equal-to X meters from a protected bird area"
