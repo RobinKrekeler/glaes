@@ -127,7 +127,7 @@ def evaluate_MARINERESERVES(regSource, tail):
     geom = []
     for s in wdpaMarineSource:
         try: 
-            geom.extend(geomExtractor(reg.extent, s, srs=reg.srs))
+            geom.extend(dissolve(geomExtractor(reg.extent, s, srs=reg.srs)))
         except TypeError: 
             print('No feature extracted from ...' + str(s[-60:]))
 
