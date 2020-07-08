@@ -7,7 +7,8 @@ from datetime import datetime as dt
 from collections import OrderedDict
 from json import dumps
 from osgeo import ogr
-from multiprocessing import Process                                                                     
+import multiprocessing as mp
+# from multiprocessing import process
 
 
 # =============================================================================
@@ -394,15 +395,24 @@ if __name__== '__main__':
     
     # parallelize if multiple contraints are given
     if len(constraints) > 1:
-        jobs = []
-        for c in constraints:
-            func = globals()["evaluate_" + c]
-            j = Process(target=func, args=(source, tail))
-            jobs.append(j)
-            j.start()
-        # wait for all jobs to finish
-        for j in jobs:
-            j.join()
+        # this parallelisation workes for all surce shp tested except europe scope
+        # jobs = []
+        # for c in constraints:
+        #     func = globals()["evaluate_" + c]
+        #     j = Process(target=func, args=(source, tail))
+        #     jobs.append(j)
+        #     j.start()
+        # # wait for all jobs to finish
+        # for j in jobs:
+        #     j.join()
+        
+        # this parallelisation approach is not tested so far
+        with mp.Pool(4) as pool:
+            for c in constraints:
+                func = globals()["evaluate_" + c]
+                pool.apply_async(func, args=(source, tail))
+            pool.close()
+            pool.join()
     else:
         func = globals()["evaluate_" + str(constraints[0])]
         func(source, tail)
