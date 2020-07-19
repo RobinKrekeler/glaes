@@ -1,3 +1,4 @@
+from math import ceil, floor
 import geokit as gk
 import numpy as np
 from os.path import join, isdir
@@ -8,7 +9,6 @@ from collections import OrderedDict
 from json import dumps
 from osgeo import ogr
 import multiprocessing as mp
-# from multiprocessing import process
 
 
 # =============================================================================
@@ -237,6 +237,48 @@ def evaluate_SHIPPING(regSource, tail):
 # UTILITY FUNCTIONS
 # =============================================================================
 
+def iterative(func):
+    def iterative_call(*args, **kwargs):
+        
+        # if func.__name__ == 'edgesByProximity': 
+        #     try:
+        #         overlap = 2 * max(kwargs['distances'])
+        #     except KeyError:
+        #         overlap = 2 * max(args[2])
+        # elif func.__name__ == 'edgesByThreshold':
+        #     overlap = 2 * 500
+        
+        reg=args[0]
+        
+        # new extents
+        res = reg.pixelRes
+        xMin = reg.extent.xMin
+        xMax = reg.extent.xMax
+        yMin = reg.extent.yMin
+        yMax = reg.extent.yMax
+        # yMedH = ceil((yMin + (yMax - yMin + overlap) / 2) / res) * res
+        # yMedL = floor((yMedH - overlap) / res) * res
+        yMed = int((yMin + (yMax - yMin) / 2) / res) * res
+        extent_top = gk.Extent.from_xXyY((xMin, xMax, yMed-res, yMax), srs=reg.extent.srs)
+        extent_bot = gk.Extent.from_xXyY((xMin, xMax, yMin, yMed+res), srs=reg.extent.srs)
+        mask_top = reg.mask[ : ceil((yMax-yMed)/res+1), :]
+        mask_bot = reg.mask[floor((yMax-yMed)/res-1) : , :]
+        reg_top = gk.RegionMask.fromMask(extent=extent_top, mask=mask_top)
+        reg_bot = gk.RegionMask.fromMask(extent=extent_bot, mask=mask_bot)
+        
+        # calculate results for both halfs and stich them together again
+        result_top = func(reg_top, *args[1:], **kwargs)
+        result_bot = func(reg_bot, *args[1:], **kwargs)
+        result = np.empty(shape=reg.mask.shape, dtype=np.uint8)
+        result[ : result_top.shape[0], : ] = result_top
+        result[-result_bot.shape[0] : , : ] = result_bot
+
+        return result
+    return iterative_call
+    
+
+
+@iterative
 def edgesByProximity(reg, geom, distances):
     
     # make initial matrix
@@ -278,6 +320,7 @@ def edgesByProximity(reg, geom, distances):
     return mat
 
 
+@iterative
 def edgesByThreshold(reg, source, thresholds, inverse=False):
     # make initial matrix
     mat = np.ones(reg.mask.shape, dtype=np.uint8)*255 # Set all values to no data (255)
@@ -395,7 +438,7 @@ if __name__== '__main__':
     
     # parallelize if multiple contraints are given
     if len(constraints) > 1:
-        # this parallelisation workes for all surce shp tested except europe scope
+        # this parallelisation workes for all source shp tested except europe scope
         # jobs = []
         # for c in constraints:
         #     func = globals()["evaluate_" + c]
