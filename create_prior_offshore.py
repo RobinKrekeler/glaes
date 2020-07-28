@@ -435,6 +435,7 @@ if __name__== '__main__':
 
     source = sys.argv[2]
     constraints = str(sys.argv[1]).split(',')
+    pool_size = int(sys.argv[3])
     
     # parallelize if multiple contraints are given
     if len(constraints) > 1:
@@ -450,7 +451,7 @@ if __name__== '__main__':
         #     j.join()
         
         # this parallelisation approach is not tested so far
-        with mp.Pool(4) as pool:
+        with mp.Pool(pool_size) as pool:
             for c in constraints:
                 func = globals()["evaluate_" + c]
                 pool.apply_async(func, args=(source, tail))
