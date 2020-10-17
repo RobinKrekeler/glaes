@@ -30,7 +30,7 @@ countriesSource = INPUT_RAW_DIR + 'NaturalEarth/ne_10m_admin_0_countries.shp'
 seacablesSource = INPUT_RAW_DIR + 'SubmarineCableMap/cable-geo.json'
 pipelinesSource = INPUT_RAW_DIR + 'WorldMap/natural_gas_pipelines_j96.shp'
 shippingSource = INPUT_RAW_DIR + 'KNB/shipping_hand_drawn.shp'
-clcSource = INPUT_RAW_DIR + 'Copernicus/u2018_clc2018_v2020_20u1_raster100m/DATA/U2018_CLC2018_V2020_20u1.tif'
+clcSource = INPUT_RAW_DIR + 'Copernicus/u2018_clc2018_v2020_20u1_raster100m/DATA/U2018_CLC2018_V2020_20u1_ordinary.tif'
 
 
 
