@@ -474,7 +474,7 @@ def evaluate_WOODLANDS_DECIDUOUS(regSource, ftrID, tail):
 
     # Indicate values and create a geomoetry from the result
     matrix = reg.indicateValues(clcSource, value=25, applyMask=False) > 0.5
-    geom = gk.geom.convertMask(matrix, bounds=reg.extent.xyXY, srs=reg.srs)
+    geom = gk.geom.polygonizeMatrix(matrix, bounds=reg.extent.xyXY, srs=reg.srs)
 
     # Get edge matrix
     result = edgesByProximity(reg, geom, distances)
