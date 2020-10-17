@@ -30,7 +30,7 @@ countriesSource = INPUT_RAW_DIR + 'NaturalEarth/ne_10m_admin_0_countries.shp'
 seacablesSource = INPUT_RAW_DIR + 'SubmarineCableMap/cable-geo.json'
 pipelinesSource = INPUT_RAW_DIR + 'WorldMap/natural_gas_pipelines_j96.shp'
 shippingSource = INPUT_RAW_DIR + 'KNB/shipping_hand_drawn.shp'
-clcSource = INPUT_RAW_DIR + 'Copernicus/u2018_clc2018_v2020_20u1_raster100m/DATA/U2018_CLC2018_V2020_20u1_ordinary.tif'
+clcSource = INPUT_RAW_DIR + 'Copernicus/u2018_clc2018_v2020_20u1_raster100m/DATA/U2018_CLC2018_V2020_20u1.tif'
 
 
 
@@ -129,19 +129,23 @@ def evaluate_MARINERESERVES(regSource, tail):
     # Make Region Mask
     reg = gk.RegionMask.load(regSource, select=0, padExtent=max(distances))
 
-    # Create a geometry list from the osm files
-    geom = []
-    for s in wdpaMarineSource:
-        try: 
-            geom.extend(dissolve(geomExtractor(reg.extent, s, srs=reg.srs)))
-        except TypeError: 
-            print('No feature extracted from ...' + str(s[-60:]))
+    count = 0
+    for seg in reg.subRegions(2000000):
+        # Create a geometry list from the osm files
+        geom = []
+        for s in wdpaMarineSource:
+            try: 
+                geom.extend(dissolve(geomExtractor(reg.extent, s, srs=reg.srs)))
+            except TypeError: 
+                print('No feature extracted from ...' + str(s[-60:]))
+    
+        # Get edge matrix
+        result = edgesByProximity(reg, geom, distances)
+    
+        # make result
+        writeEdgeFile( result, reg, name, '_'.join(tail, count), unit, description, source, distances)
 
-    # Get edge matrix
-    result = edgesByProximity(reg, geom, distances)
-
-    # make result
-    writeEdgeFile( result, reg, name, tail, unit, description, source, distances)
+        count += 1
 
 
 def evaluate_MARINEBIRDS(regSource, tail):
@@ -250,7 +254,7 @@ def evaluate_OPENAREA(regSource, tail):
     reg = gk.RegionMask.load(regSource, select=0, padExtent=max(distances))
 
     # Indicate values and create a geomoetry from the result
-    matrix = reg.indicateValues(clcSource, value=(211,212,231,243,333), applyMask=False) > 0.5
+    matrix = reg.indicateValues(clcSource, value=(12,13,18,21,32), applyMask=False) > 0.5
     geom = gk.geom.polygonizeMatrix(matrix, bounds=reg.extent.xyXY, srs=reg.srs)
 
     # Get edge matrix
@@ -322,7 +326,7 @@ def iterative(func, segments=5):
     
 
 
-@iterative
+# @iterative
 def edgesByProximity(reg, geom, distances):
     
     # make initial matrix
@@ -364,7 +368,7 @@ def edgesByProximity(reg, geom, distances):
     return mat
 
 
-@iterative
+# @iterative
 def edgesByThreshold(reg, source, thresholds, inverse=False):
     # make initial matrix
     mat = np.ones(reg.mask.shape, dtype=np.uint8)*255 # Set all values to no data (255)
