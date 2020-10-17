@@ -30,6 +30,8 @@ countriesSource = INPUT_RAW_DIR + 'NaturalEarth/ne_10m_admin_0_countries.shp'
 seacablesSource = INPUT_RAW_DIR + 'SubmarineCableMap/cable-geo.json'
 pipelinesSource = INPUT_RAW_DIR + 'WorldMap/natural_gas_pipelines_j96.shp'
 shippingSource = INPUT_RAW_DIR + 'KNB/shipping_hand_drawn.shp'
+clcSource = INPUT_RAW_DIR + 'Copernicus/u2018_clc2018_v2020_20u1_raster100m/DATA/U2018_CLC2018_V2020_20u1.tif'
+
 
 
 #%%
@@ -63,7 +65,10 @@ EVALUATION_VALUES = {
     "shipping_proximity":
         # Indicates distances too close to center of shipping routes (m)
         [0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 
-         6000]
+         6000],
+    "open_area_proximity":
+        # Indicates distance to land suitable for utility PV (m)
+        [0, 100]
     }
 
 
@@ -232,12 +237,35 @@ def evaluate_SHIPPING(regSource, tail):
     writeEdgeFile( result, reg, name, tail, unit, description, source, distances)
 
 
+def evaluate_OPENAREA(regSource, tail):
+    name = "open_area_proximity"
+    unit = "meters"
+    description = "Indicates distance to land suitable for utility PV"
+    source = "CLC18"
+
+    # Get distances
+    distances = EVALUATION_VALUES[name]
+
+    # Make Region Mask
+    reg = gk.RegionMask.load(regSource, select=0, padExtent=max(distances))
+
+    # Indicate values and create a geomoetry from the result
+    matrix = reg.indicateValues(clcSource, value=(211,212,231,243,333), applyMask=False) > 0.5
+    geom = gk.geom.convertMask(matrix, bounds=reg.extent.xyXY, srs=reg.srs)
+
+    # Get edge matrix
+    result = edgesByProximity(reg, geom, distances)
+
+    # make result
+    writeEdgeFile( result, reg, name, tail, unit, description, source, distances)
+
+
 #%%
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
 
-def iterative(func):
+def iterative(func, segments=5):
     def iterative_call(*args, **kwargs):
         
         # if func.__name__ == 'edgesByProximity': 
@@ -256,24 +284,40 @@ def iterative(func):
         xMax = reg.extent.xMax
         yMin = reg.extent.yMin
         yMax = reg.extent.yMax
-        # yMedH = ceil((yMin + (yMax - yMin + overlap) / 2) / res) * res
-        # yMedL = floor((yMedH - overlap) / res) * res
-        yMed = int((yMin + (yMax - yMin) / 2) / res) * res
-        extent_top = gk.Extent.from_xXyY((xMin, xMax, yMed-res, yMax), srs=reg.extent.srs)
-        extent_bot = gk.Extent.from_xXyY((xMin, xMax, yMin, yMed+res), srs=reg.extent.srs)
-        mask_top = reg.mask[ : ceil((yMax-yMed)/res+1), :]
-        mask_bot = reg.mask[floor((yMax-yMed)/res-1) : , :]
-        reg_top = gk.RegionMask.fromMask(extent=extent_top, mask=mask_top)
-        reg_bot = gk.RegionMask.fromMask(extent=extent_bot, mask=mask_bot)
-        
-        # calculate results for both halfs and stich them together again
-        result_top = func(reg_top, *args[1:], **kwargs)
-        result_bot = func(reg_bot, *args[1:], **kwargs)
-        result = np.empty(shape=reg.mask.shape, dtype=np.uint8)
-        result[ : result_top.shape[0], : ] = result_top
-        result[-result_bot.shape[0] : , : ] = result_bot
+        dy = floor((yMax - yMin)/res / segments) * res
 
-        return result
+        Result = np.empty(shape=(0, int((xMax-xMin)/res)), dtype=np.uint8)
+        for i in range(segments):
+            ymax_e = yMax - i * dy
+            ymin_e = yMin if i == segments - 1 else ymax_e - dy
+           
+            ymin = yMin + i * dy
+            ymax = yMax if i == segments - 1 else ymin + dy
+            
+            extent = gk.Extent.from_xXyY((xMin, xMax, ymin_e, ymax_e), srs=reg.extent.srs)
+            mask = reg.mask[int((ymin-yMin)/res) : int((ymax-yMin)/res), :]
+            reg_i = gk.RegionMask.fromMask(extent=extent, mask=mask)
+            result = func(reg_i, *args[1:], **kwargs)
+            Result = np.append(Result, result, axis=0)
+        
+        return Result
+        
+        # yMed = int((yMin + (yMax - yMin) / 2) / res) * res
+        # extent_top = gk.Extent.from_xXyY((xMin, xMax, yMed-res, yMax), srs=reg.extent.srs)
+        # extent_bot = gk.Extent.from_xXyY((xMin, xMax, yMin, yMed+res), srs=reg.extent.srs)
+        # mask_top = reg.mask[ : ceil((yMax-yMed)/res+1), :]
+        # mask_bot = reg.mask[floor((yMax-yMed)/res-1) : , :]
+        # reg_top = gk.RegionMask.fromMask(extent=extent_top, mask=mask_top)
+        # reg_bot = gk.RegionMask.fromMask(extent=extent_bot, mask=mask_bot)
+        
+        # # calculate results for both halfs and stich them together again
+        # result_top = func(reg_top, *args[1:], **kwargs)
+        # result_bot = func(reg_bot, *args[1:], **kwargs)
+        # result = np.empty(shape=reg.mask.shape, dtype=np.uint8)
+        # result[ : result_top.shape[0], : ] = result_top
+        # result[-result_bot.shape[0] : , : ] = result_bot
+
+        # return result
     return iterative_call
     
 
