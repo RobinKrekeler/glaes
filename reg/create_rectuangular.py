@@ -66,14 +66,13 @@ OUT_DIR = 'C:/users/Robin/Git_Projects/glaes/reg/europe_eez_rectangular.shp'
 # read shp files
 eez = gpd.read_file('C:/Users/Robin/Documents/Inatech/Model/input_raw/Marineregions/eez_v11.shp')
 europe_rectangular = gpd.read_file('C:/users/Robin/Git_Projects/glaes/reg/europe_rectangular.shp')
-# europe = pd.read_csv('C:/Users/Robin/Documents/Inatech/Model/input_raw/ISO/country_codes.csv',
-                     # encoding='ISO-8859-1')
+europe = pd.read_csv('C:/Users/Robin/Documents/Inatech/Model/input_raw/ISO/country_codes.csv',
+                      encoding='ISO-8859-1')
 
 # filter EEZ of european countries
-# europe = europe[europe['region'] == 'Europe']['alpha-3']
-# europe = europe[europe != 'RUS']
-# europe_eez = eez[eez['ISO_SOV1'].isin(europe)].cx[-44:75, 30:75]
-europe_eez = eez.cx[-44:75, 30:75]
+europe = europe[europe['region'] == 'Europe']['alpha-3']
+europe = europe[europe != 'RUS']
+europe_eez = eez[eez['ISO_SOV1'].isin(europe)].cx[-44:75, 30:75]
 
 # unify european EEZs
 europe_eez = europe_eez['geometry'].unary_union
@@ -98,12 +97,21 @@ europe_eez_rectangular.to_file(OUT_DIR)
 # European scope EEZ
 # =============================================================================
 
+def intersection(poly1, poly2):
+    """Calculate intersection of two polygons repairing invalid polygon 1."""
+    try:
+        return poly.intersection(poly2)
+    except:
+        return poly1.buffer(0).intersection(poly2)
+
 #paths
 OUT_DIR = 'C:/users/Robin/Git_Projects/glaes/reg/europe_eez_rectangular2.shp'
 eez_dir = 'C:/Users/Robin/Documents/Inatech/Model/input_raw/Marineregions/eez_v11.shp'
-europe_rectangular_dir ='C:/users/Robin/Git_Projects/glaes/reg/europe_rectangular.shp'
+# europe_rectangular_dir ='C:/users/Robin/Git_Projects/glaes/reg/europe_rectangular.shp'
+europe_rectangular_dir ='C:/users/Robin/Git_Projects/glaes/reg/north_sea_rectangular.shp'
 
-# filter shaoes in rectangular
+
+# filter shapes in rectangular
 polygons = []
 with fiona.open(eez_dir) as eez:
     meta_source = eez.meta
@@ -119,54 +127,37 @@ with fiona.open(eez_dir) as eez:
                       pyproj.Proj(**meta_source['crs']),  # from
                       pyproj.Proj(**meta['crs']))  # to                
     
-    for feature in eez.filter(bbox=(-44, 30, 75, 75)):
+    for feature in eez.filter(bbox=(8,53,9,54)):
         if feature["geometry"] is None:
             print('continue 1')
             continue
         
         feat = sp.shape(feature['geometry'])
+        feat = transform(project, feat)
         
         if isinstance(feat, sp.multipolygon.MultiPolygon):
-            feat = unary_union(feat)
+            feat = list(feat)
+        else:
+            feat = [feat]
+                
+        polys = [intersection(f, rect) for f in feat]
+        polys = [p for p in polys if not p.is_empty]
         
-        feat = transform(project, feat)
-        polygon = feat.intersection(rect)
-        
-        if not polygon.is_empty:
-            polygons.append(polygon)
+        polygons.extend(polys)
 
-out_shape = unary_union(polygons)
+# debundle multipolygons
+polygons_debundled = []
+for p in polygons:
+    if isinstance(p, sp.polygon.Polygon):
+        polygons_debundled.append(p)
+    elif isinstance(p, sp.multipolygon.MultiPolygon):
+        polygons_debundled.extend(list(p))
+    else:
+        print('Unsupported type in polygons')
+
+out_shape = unary_union(polygons_debundled)
 
 # write file
 with fiona.open(OUT_DIR, 'w', driver='ESRI Shapefile', schema=SCHEMA, crs=meta['crs']) as europe_eez_rectangular:
     europe_eez_rectangular.write({'geometry': sp.mapping(out_shape),
                                   'properties': {'id': 'scope'}})
-
-
-
-
-idx = index.Index()
-for pos, poly in enumerate(europe_rectangular):
-   idx.insert(pos, sp.shape(poly['geometry']).bounds)
-   
-   
-   
-for poly in eez:
-    eez_scope = [sp.shape(poly['geometry'])]
-    
-    
-    
-    
-
-# common CRS
-europe_eez = europe_eez.to_crs(europe_rectangular.crs)
-
-europe_eez_rectangular = gpd.GeoDataFrame(
-    {'geometry': gpd.overlay(europe_rectangular,europe_eez, how='intersection').unary_union}, 
-    crs=europe_rectangular.crs
-    )
-europe_eez_rectangular.to_file(OUT_DIR)
-
-with fiona.open(OUT_DIR, 'w', 'ESRI Shapefile', schema=SCHEMA, crs=europe_rectangular.crs) as c:
-    c.write({'geometry': sp.mapping(europe_eez_rectangular2),
-             'properties': {'id': 'scope'}})
