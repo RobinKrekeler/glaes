@@ -255,7 +255,7 @@ def evaluate_OPENAREA(regSource, tail):
 
     # Indicate values and create a geomoetry from the result
     matrix = reg.indicateValues(clcSource, value=(12,13,18,21,32), applyMask=False) > 0.5
-    geom = gk.geom.polygonizeMatrix(matrix, bounds=reg.extent.xyXY, srs=reg.srs)
+    geom = gk.geom.polygonizeMatrix(matrix, bounds=reg.extent.xyXY, srs=reg.srs)['geom'].to_list()
 
     # Get edge matrix
     result = edgesByProximity(reg, geom, distances)
