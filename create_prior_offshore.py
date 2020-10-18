@@ -129,23 +129,36 @@ def evaluate_MARINERESERVES(regSource, tail):
     # Make Region Mask
     reg = gk.RegionMask.load(regSource, select=0, padExtent=max(distances))
 
-    count = 0
-    for seg in reg.subRegions(2000000):
-        # Create a geometry list from the osm files
-        geom = []
-        for s in wdpaMarineSource:
-            try: 
-                geom.extend(dissolve(geomExtractor(reg.extent, s, srs=reg.srs)))
-            except TypeError: 
-                print('No feature extracted from ...' + str(s[-60:]))
-    
-        # Get edge matrix
-        result = edgesByProximity(reg, geom, distances)
-    
-        # make result
-        writeEdgeFile( result, reg, name, '_'.join(tail, count), unit, description, source, distances)
+    geom = []
+    for s in wdpaMarineSource:
+        try: 
+            geom.extend(dissolve(geomExtractor(reg.extent, s, srs=reg.srs)))
+        except TypeError: 
+            print('No feature extracted from ...' + str(s[-60:]))
 
-        count += 1
+    # Get edge matrix
+    result = edgesByProximity(reg, geom, distances)
+
+    # make result
+    writeEdgeFile( result, reg, name, tail, unit, description, source, distances)
+
+    # count = 0
+    # for seg in reg.subRegions(2000000):
+    #     # Create a geometry list from the osm files
+    #     geom = []
+    #     for s in wdpaMarineSource:
+    #         try: 
+    #             geom.extend(dissolve(geomExtractor(seg.extent, s, srs=reg.srs)))
+    #         except TypeError: 
+    #             print('No feature extracted from ...' + str(s[-60:]))
+    
+    #     # Get edge matrix
+    #     result = edgesByProximity(seg, geom, distances)
+    
+    #     # make result
+    #     writeEdgeFile( result, seg, name, '_'.join([tail, count]), unit, description, source, distances)
+
+    #     count += 1
 
 
 def evaluate_MARINEBIRDS(regSource, tail):
